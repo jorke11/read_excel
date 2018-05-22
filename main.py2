@@ -13,21 +13,14 @@ now = datetime.datetime.now()
 t0 = time.clock()
 
 path_files = "/var/www/python/read_excel"
-#path_files = "/home/cmasiva"
+
 config = ConfigParser()
 config.read(path_files+"/.env")
-
-#user = 'postgres'
-#db = "contactosms"
-#host = "10.221.16.88"
-#pw = "123"
 
 user = config.get("DATABASE", "user")
 db = config.get("DATABASE", "database")
 host = config.get("DATABASE", "host")
 pw = config.get("DATABASE", "password")
-
-
 
 try:
     conn = psycopg2.connect(
@@ -38,38 +31,6 @@ except:
 cursor = conn.cursor()
 cursor_cont = conn.cursor()
 
-
-query = "SELECT id,ejecutado,estado,consulta FROM crones where nombre ilike 'croncargaA'"
-row = cursor.execute(query)
-
-
-if cursor.rowcount == 0:
-    query = "INSERT INTO crones(nombre, unidad, medida, ejecutado,estado,consulta) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;"
-    cursor.execute(query, ('croncargaA', 1, 'minuto', now.strftime("%Y-%m-%d %H:%M"), 0,0))
-else:
-    data = cursor.fetchone()
-    if data[2] == 1:
-        
-        if data[3] > 5:
-            consulta = 0
-            estado = 0
-        else:
-            consulta = data[3] + 1
-            estado = 1
-
-        query_cont = "update crones set consulta=(%s), estado=(%s), ejecutado=(%s) where id=(%s)"
-        cursor.execute(query_cont, (consulta, estado, now.strftime("%Y-%m-%d %H:%M"),data[0]))
-        conn.commit()
-        print "Cron en proceso, no se debe ejecutar de nuevo"
-        exit()
-    else:
-        query_cont = "update crones set estado=(%s) where id=(%s)"
-        cursor.execute(query_cont, (1,data[0]))
-        conn.commit()
-
-conn.commit()   
-
-
 def getCarrier(data, numero):
     carrie_id = 0
     for row in data:
@@ -78,7 +39,8 @@ def getCarrier(data, numero):
     return carrie_id
 
 def getPortado(number, carrier_id):
-    query = "SELECT current_carrie_id FROM portados where numero = '" + str(number)+"'"
+    query = "SELECT current_carrie_id FROM portados where numero = '" + \
+        str(number)+"'"
     row = cursor.execute(query)
     if not row:
         return carrier_id
@@ -114,9 +76,9 @@ for arc_excel in os.listdir(path_files + "/cargados"):
     pesta = doc.sheetnames
     hoja = doc[pesta[0]]
 
-    query = "INSERT INTO bases(idempresa, idusuario, nombre, fecha,archoriginal,estado) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;"
+    query = "INSERT INTO bases(idempresa, idusuario, nombre, fecha,archoriginal) VALUES (%s, %s, %s, %s, %s) RETURNING id;"
     cursor.execute(
-        query, (4, user_id, name_file, now.strftime("%Y-%m-%d %H:%M"), name_file,4))
+        query, (4, user_id, name_file, now.strftime("%Y-%m-%d %H:%M"), name_file))
     base_id = cursor.fetchone()[0]
     cont=0
     total=0
@@ -127,10 +89,9 @@ for arc_excel in os.listdir(path_files + "/cargados"):
             if carrier_id > 0:
                 carrier_id = getPortado(filas[0].value, carrier_id)
                 canal_id = getPreference(preference_user, carrier_id)
-                #query = "INSERT INTO registrosfast(idbase, numero, mensaje, nota, orden, estado, fechacargue, idcanal, idcarrie, cargue) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 query = "INSERT INTO registros(idbase, numero, mensaje, nota, orden, estado, fechacargue, idcanal, idcarrie, cargue) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-                cursor.execute(query, (base_id, str(filas[0].value), filas[1].value, filas[2].value, 1, 2, now.strftime(
-                    "%Y-%m-%d %H:%M"), canal_id, carrier_id, 'python'))
+                cursor.execute(query, (base_id, str(filas[0].value), filas[1].value, filas[2].value, canal_id, carrier_id, now.strftime(
+                    "%Y-%m-%d %H:%M"), 3, 1, 'python'))
             else:
                 query = "INSERT INTO errores(idbase, numero, mensaje, nota, orden, estado, fecha, error) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
                 cursor.execute(query, (base_id, str(filas[0].value), filas[1].value, filas[2].value, 1, 3, now.strftime(
@@ -152,10 +113,9 @@ for arc_excel in os.listdir(path_files + "/cargados"):
         cont = cont + 1
         
 
-    query_cont = "update bases set estado=(%s) where id=(%s)"
-    cursor.execute(query_cont, (5,base_id))
+
     conn.commit()
-    
+
     conn.close()
     
     print "ejecucion de la base " + str(base_id)
