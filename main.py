@@ -7,27 +7,24 @@ import datetime
 import os
 from ConfigParser import ConfigParser
 
-
 now = datetime.datetime.now()
 
 t0 = time.clock()
 
-path_files = "/var/www/python/read_excel"
-#path_files = "/home/cmasiva"
+#path_files = "/var/www/python/read_excel"
+path_files = "/home/cmasiva"
 config = ConfigParser()
 config.read(path_files+"/.env")
 
-#user = 'postgres'
-#db = "contactosms"
-#host = "10.221.16.88"
-#pw = "123"
+user = 'postgres'
+db = "contactosms"
+host = "10.221.16.88"
+pw = "123"
 
-user = config.get("DATABASE", "user")
-db = config.get("DATABASE", "database")
-host = config.get("DATABASE", "host")
-pw = config.get("DATABASE", "password")
-
-
+#user = config.get("DATABASE", "user")
+#db = config.get("DATABASE", "database")
+#host = config.get("DATABASE", "host")
+#pw = config.get("DATABASE", "password")
 
 try:
     conn = psycopg2.connect(
@@ -40,31 +37,31 @@ cursor_cont = conn.cursor()
 
 
 query = "SELECT id,ejecutado,estado,consulta FROM crones where nombre ilike 'croncargaA'"
-row = cursor.execute(query)
+cursor.execute(query)
 
 
 if cursor.rowcount == 0:
     query = "INSERT INTO crones(nombre, unidad, medida, ejecutado,estado,consulta) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;"
     cursor.execute(query, ('croncargaA', 1, 'minuto', now.strftime("%Y-%m-%d %H:%M"), 0,0))
 else:
-    data = cursor.fetchone()
-    if data[2] == 1:
+    cron = cursor.fetchone()
+    if cron[2] == 1:
         
-        if data[3] > 5:
+        if cron[3] > 5:
             consulta = 0
             estado = 0
         else:
-            consulta = data[3] + 1
+            consulta = cron[3] + 1
             estado = 1
 
         query_cont = "update crones set consulta=(%s), estado=(%s), ejecutado=(%s) where id=(%s)"
-        cursor.execute(query_cont, (consulta, estado, now.strftime("%Y-%m-%d %H:%M"),data[0]))
+        cursor.execute(query_cont, (consulta, estado, now.strftime("%Y-%m-%d %H:%M"),cron[0]))
         conn.commit()
-        print "Cron en proceso, no se debe ejecutar de nuevo"
+        print "Cron en proceso, no se debe ejecutar de nuevo, intento " + str(cron[3])
         exit()
     else:
         query_cont = "update crones set estado=(%s) where id=(%s)"
-        cursor.execute(query_cont, (1,data[0]))
+        cursor.execute(query_cont, (1,cron[0]))
         conn.commit()
 
 conn.commit()   
@@ -111,15 +108,21 @@ for arc_excel in os.listdir(path_files + "/cargados"):
 # suponiendo que el archivo esta en el mismo directorio del script
     doc = openpyxl.load_workbook(name_file)
 
+    
+    
     pesta = doc.sheetnames
     hoja = doc[pesta[0]]
 
-    query = "INSERT INTO bases(idempresa, idusuario, nombre, fecha,archoriginal,estado) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;"
+    reg = int(hoja.max_row) - 1
+
+    query = "INSERT INTO bases(idempresa, idusuario, nombre, fecha,archoriginal,estado,registros) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;"
     cursor.execute(
-        query, (4, user_id, name_file, now.strftime("%Y-%m-%d %H:%M"), name_file,4))
+        query, (4, user_id, name_file, now.strftime("%Y-%m-%d %H:%M"), name_file,4,reg))
     base_id = cursor.fetchone()[0]
+    conn.commit()
     cont=0
     total=0
+
     for filas in hoja.rows:
         if re.match('\d{10}', str(filas[0].value)) != None:
             print str(filas[0].value)+" "+filas[1].value + " "+filas[2].value
@@ -127,8 +130,8 @@ for arc_excel in os.listdir(path_files + "/cargados"):
             if carrier_id > 0:
                 carrier_id = getPortado(filas[0].value, carrier_id)
                 canal_id = getPreference(preference_user, carrier_id)
-                #query = "INSERT INTO registrosfast(idbase, numero, mensaje, nota, orden, estado, fechacargue, idcanal, idcarrie, cargue) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
-                query = "INSERT INTO registros(idbase, numero, mensaje, nota, orden, estado, fechacargue, idcanal, idcarrie, cargue) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                query = "INSERT INTO registrosfast(idbase, numero, mensaje, nota, orden, estado, fechacargue, idcanal, idcarrie, cargue) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                #query = "INSERT INTO registros(idbase, numero, mensaje, nota, orden, estado, fechacargue, idcanal, idcarrie, cargue) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                 cursor.execute(query, (base_id, str(filas[0].value), filas[1].value, filas[2].value, 1, 2, now.strftime(
                     "%Y-%m-%d %H:%M"), canal_id, carrier_id, 'python'))
             else:
@@ -154,6 +157,11 @@ for arc_excel in os.listdir(path_files + "/cargados"):
 
     query_cont = "update bases set estado=(%s) where id=(%s)"
     cursor.execute(query_cont, (5,base_id))
+
+
+    query_cont = "update crones set estado=(%s) where id=(%s)"
+    cursor.execute(query_cont, (0,cron[0]))
+
     conn.commit()
     
     conn.close()
