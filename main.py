@@ -145,7 +145,7 @@ if quantity_files > 0:
                         "%Y-%m-%d %H:%M"), "Carrier no existe"))
                     error=error+1
             else:
-                if str(filas[0].value)!='CELULAR':
+                if str(filas[0].value).upper()!='CELULAR':
                     query = "INSERT INTO errores(idbase, numero, mensaje, nota, orden, estado, fecha, error) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
                     cursor.execute(query, (base_id, str(filas[0].value), filas[1].value, filas[2].value, 1, 3, now.strftime(
                         "%Y-%m-%d %H:%M"), "No cumple con los requisitos"))
